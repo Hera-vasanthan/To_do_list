@@ -1,184 +1,110 @@
-import "./App.css";
-import React, { useState } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import _ from "lodash";
-import { v4 } from "uuid";
-import {
-  Dialog,
-  DialogTitle,
-  DialogActions,
-  DialogContent,
-  Button
-} from "@mui/material";
+const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
-//import addbutton from './add-button.png';
-//import raspberrysans from './raspberryicon.png';
+const app = express();
+app.use(cors());
 
-function App() {
-  const [text, setText] = useState("");
-  const [state, setState] = useState({
-    todo: {
-      title: "Not Started",
-      items: [],
-      css: {
-        "border-color": "red"
+// Create uploads folder if not exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+const upload = multer({ dest: uploadDir });
+
+const AI_API_URL = 'https://your-company-ai-api/transcribe'; // Replace this
+const AI_API_KEY = 'your_api_key_here'; // Replace this
+
+app.post('/transcribe', upload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No video uploaded' });
+
+    const filePath = req.file.path;
+    const fileStream = fs.createReadStream(filePath);
+
+    const response = await axios.post(
+      AI_API_URL,
+      fileStream,
+      {
+        headers: {
+          'Content-Type': req.file.mimetype,
+          Authorization: `Bearer ${AI_API_KEY}`,
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
       }
-    },
-    inprogress: {
-      title: "In Progress",
-      items: [],
-      css: {
-        "border-color": "yellow"
-      }
-    },
-    done: {
-      title: "Completed",
-      items: [],
-      css: {
-        "border-color": "green"
-      }
-    }
-  });
+    );
 
-  const handleDragEnd = ({ destination, source }) => {
-    if (!destination) return;
+    fs.unlinkSync(filePath);
 
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source
-    )
+    res.json({ transcript: response.data.transcript || 'No transcript from AI' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to transcribe', details: error.message });
+  }
+});
+
+const PORT = 5000;
+app.listen(PORT, () => {
+  console.log(`Backend listening on port ${PORT}`);
+});
+import React, { useState } from 'react';
+import axios from 'axios';
+
+export default function App() {
+  const [videoFile, setVideoFile] = useState(null);
+  const [transcript, setTranscript] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleFileChange = (e) => {
+    setVideoFile(e.target.files[0]);
+    setTranscript('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!videoFile) {
+      alert('Please select a video file');
       return;
+    }
 
-    const itemcopy = { ...state[source.droppableId].items[source.index] };
-    console.log(destination);
+    setLoading(true);
 
-    setState((prev) => {
-      prev = { ...prev };
-      prev[source.droppableId].items.splice(source.index, 1);
-      prev[destination.droppableId].items.splice(
-        destination.index,
-        0,
-        itemcopy
-      );
-      return prev;
-    });
-  };
+    const formData = new FormData();
+    formData.append('video', videoFile);
 
-  const addItem = () => {
-    if (!text) return;
-    setState((prev) => {
-      return {
-        ...prev,
-        todo: {
-          title: "To-Do",
-          items: [{ id: v4(), name: text }, ...prev.todo.items]
-        }
-      };
-    });
-    setText("");
-  };
-  const [open, setOpen] = React.useState(false);
-
-  const handleClickToOpen = () => {
-    setOpen(true);
-  };
-
-  const handleToClose = () => {
-    setOpen(false);
+    try {
+      const res = await axios.post('http://localhost:5000/transcribe', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setTranscript(res.data.transcript);
+    } catch (err) {
+      alert('Error during transcription');
+      console.error(err);
+    }
+    setLoading(false);
   };
 
   return (
-    <div className="App">
-      <br />
-
-      <div class="header"> To Do List Application</div>
-      <div className="add_todo">
-        <Dialog open={open} onClose={handleToClose}>
-          <DialogTitle>{"Add New Task"}</DialogTitle>
-          <DialogContent>
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => {
-                handleToClose();
-                addItem();
-              }}
-              color="primary"
-              autoFocus
-            >
-              Submit
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <Button
-          variant="outlined"
-          color="primary"
-          className="addbutton"
-          onClick={handleClickToOpen}
-        >
-          {" "}
-          + NewTask
-        </Button>
-      </div>
-      <div className="drop">
-        <DragDropContext onDragEnd={handleDragEnd}>
-          {_.map(state, (data, key) => {
-            return (
-              <div key={key} className="column">
-                <h2 className="datatitle" style={data.css}>
-                  {data.title}
-                </h2>
-
-                <Droppable droppableId={key}>
-                  {(provided) => {
-                    return (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className="droppable_column"
-                      >
-                        {data.items.map((element, index) => {
-                          return (
-                            <Draggable
-                              key={element.id}
-                              index={index}
-                              draggableId={element.id.toString()}
-                              className="draggable_item"
-                            >
-                              {(provided) => {
-                                return (
-                                  <div
-                                    ref={provided.innerRef}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    className={key.toString()}
-                                  >
-                                    {element.name}
-                                  </div>
-                                );
-                              }}
-                            </Draggable>
-                          );
-                        })}
-                        {provided.placeholder}
-                      </div>
-                      //console.log(draggableId);  </div>
-                    );
-                  }}
-                </Droppable>
-              </div>
-            );
-          })}
-        </DragDropContext>
-      </div>
+    <div style={{ padding: 20, maxWidth: 600, margin: 'auto', fontFamily: 'Arial' }}>
+      <h2>Video Transcription</h2>
+      <form onSubmit={handleSubmit}>
+        <input type="file" accept="video/*" onChange={handleFileChange} />
+        <br />
+        <button type="submit" disabled={loading} style={{ marginTop: 10 }}>
+          {loading ? 'Transcribing...' : 'Transcribe Video'}
+        </button>
+      </form>
+      {transcript && (
+        <div style={{ marginTop: 20, backgroundColor: '#f0f0f0', padding: 15 }}>
+          <h3>Transcript:</h3>
+          <p style={{ whiteSpace: 'pre-wrap' }}>{transcript}</p>
+        </div>
+      )}
     </div>
   );
-}
-
-export default App;
+  }
