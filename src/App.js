@@ -108,3 +108,62 @@ export default function App() {
     </div>
   );
   }
+app.get('/transcripts/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const transcriptPath = path.join(__dirname, 'transcripts', filename);
+
+  if (fs.existsSync(transcriptPath)) {
+    res.download(transcriptPath, filename, (err) => {
+      if (err) {
+        console.error('Error sending file:', err);
+        res.status(500).send('Could not download file');
+      }
+    });
+  } else {
+    res.status(404).send('File not found');
+  }
+});
+
+const [downloadFile, setDownloadFile] = useState('');
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!videoFile) return alert('Please select a video file');
+
+  setLoading(true);
+  setTranscript('');
+  setDownloadFile('');
+
+  const formData = new FormData();
+  formData.append('video', videoFile);
+
+  try {
+    const res = await axios.post('http://localhost:5000/transcribe', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+
+    setTranscript(res.data.transcript);
+    setDownloadFile(res.data.transcriptFileName);  // save filename for download
+  } catch (err) {
+    alert('Error during transcription');
+    console.error(err);
+  }
+  setLoading(false);
+};
+{downloadFile && (
+  <a
+    href={`http://localhost:5000/transcripts/${downloadFile}`}
+    download={downloadFile}
+    style={{
+      display: 'inline-block',
+      marginTop: 15,
+      padding: '8px 12px',
+      backgroundColor: '#007bff',
+      color: '#fff',
+      textDecoration: 'none',
+      borderRadius: 4,
+    }}
+  >
+    Download Transcript
+  </a>
+)}
